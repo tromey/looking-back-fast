@@ -5,19 +5,19 @@
 
 ;; Subpatterns taking a sequence of sexps that can be reversed by
 ;; reversing the arguments.
-(defconst rvrx--ordinary-subpatterns
+(defconst looking-back-fast--ordinary-subpatterns
   '(and : seq sequence submatch group submatch-n group-n or |
 	minimal-match maximal-match zero-or-more 0+
 	* *? one-or-more 1+ + +? zero-or-one optional opt ? ??))
 
 ;; If a pattern is a list whose car is one of these symbols, it can be
 ;; passed through without change.
-(defconst rvrx--pass-through
+(defconst looking-back-fast--pass-through
   '(any in char not syntax category))
 
 ;; Symbols that are mapped to a mirror symbol in the reversed regexp.
 ;; This is a bidirectional alist, used with both assq and rassq.
-(defconst rvrx--mirror-alist
+(defconst looking-back-fast--mirror-alist
   '((line-start . line-end)
     (bol . eol)
     (string-start . string-end)
@@ -28,7 +28,7 @@
     (bow . eow)
     (symbol-start . symbol-end)))
 
-(defun rvrx-reverse (regexp)
+(defun looking-back-fast-reverse (regexp)
   "Reverse a regular expression.
 
 REGEXP is an Emacs regular expression in the form used by `rx'.
@@ -40,24 +40,25 @@ result will match the reversed string."
      (reverse regexp))
 
     ((pred symbolp)
-     (let ((val (assq regexp rvrx--mirror-alist)))
+     (let ((val (assq regexp looking-back-fast--mirror-alist)))
        (if val
 	   (cdr val)
-	 (car (rassq regexp rvrx--mirror-alist)))))
+	 (car (rassq regexp looking-back-fast--mirror-alist)))))
 
-    ((and `(,x . ,rest) (guard (memq x rvrx--ordinary-subpatterns)))
-     (cons x (reverse (mapcar #'rvrx-reverse rest))))
+    ((and `(,x . ,rest)
+	  (guard (memq x looking-back-fast--ordinary-subpatterns)))
+     (cons x (reverse (mapcar #'looking-back-fast-reverse rest))))
 
     (`(repeat . (,n . (,m . (,sexp . nil))))
-     (list 'repeat n m (rvrx-reverse sexp)))
+     (list 'repeat n m (looking-back-fast-reverse sexp)))
     (`(repeat . (,n . (,sexp . nil)))
-     (list 'repeat n (rvrx-reverse sexp)))
+     (list 'repeat n (looking-back-fast-reverse sexp)))
     (`(** . (,n . (,m . ,rest)))
-     `(= ,n ,m . (mapcar #'rvrx-reverse rest)))
+     `(= ,n ,m . (mapcar #'looking-back-fast-reverse rest)))
     (`(= . (,n . ,rest))
-     `(= ,n . (mapcar #'rvrx-reverse rest)))
+     `(= ,n . (mapcar #'looking-back-fast-reverse rest)))
     (`(>= . (,n . ,rest))
-     `(>= ,n . (mapcar #'rvrx-reverse rest)))
+     `(>= ,n . (mapcar #'looking-back-fast-reverse rest)))
 
     (`(backref . ,_)
      ;; We could though, with a trick and more work.  The idea is,
@@ -73,7 +74,7 @@ result will match the reversed string."
     (`(regexp . ,_)
      (error "'regexp form not handled here"))
 
-    ((and `(,op . ,_) (guard (memq op rvrx--pass-through)))
+    ((and `(,op . ,_) (guard (memq op looking-back-fast--pass-through)))
      regexp)
 
     ((pred listp)
@@ -121,13 +122,15 @@ continue the match elsewhere."
     (nconc match lastlex)))
 
 (defun looking-back-fast--do (regexp &optional stop)
-  (let ((lexer (lex-compile (rvrx-reverse (lex-parse-re regexp)))))
+  (let ((lexer (lex-compile (looking-back-fast-reverse
+			     (lex-parse-re regexp)))))
     (lex-match-buffer-backward lexer stop)))
 
 (defmacro looking-back-fast (regexp &optional stop)
   (if (stringp regexp)
       ;; Do the work at compile time.
-      (let ((lexer (lex-compile (rvrx-reverse (lex-parse-re regexp)))))
+      (let ((lexer (lex-compile (looking-back-fast-reverse
+				 (lex-parse-re regexp)))))
 	`(cadr (lex-match-buffer-backward ,lexer ,stop)))
     ;; Do the work later.
     `(cadr (looking-back-fast--do ,regexp, stop))))
