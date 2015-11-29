@@ -1,3 +1,5 @@
+(require 'lex)
+(require 'lex-parse-re)
 
 ;; Subpatterns taking a sequence of sexps that can be reversed by
 ;; reversing the arguments.
@@ -76,3 +78,54 @@ result will match the reversed string."
      (error "unrecognized form %S" regexp))
 
     (x x)))
+
+(defun lex-match-buffer-backward (lex &optional stop)
+  "Match LEX against buffer between point and STOP, working backwards.
+Return a triplet (VALUE ENDPOS . LEXER) where VALUE is the
+value of returned by the lexer for the match found (or nil), ENDPOS
+is the end position of the match found (or nil), and LEXER is the
+state of the engine at STOP, which can be passed back to
+continue the match elsewhere."
+  ;; FIXME: Move this to C.
+  (unless stop  (setq stop (point-min)))
+  (let ((start (point))
+        (match (list nil nil))
+        (lastlex lex))
+    (while
+        (progn
+          (while (eq (car lex) 'check)
+            (setq lex (if (funcall (car (nth 1 lex)) (cdr (nth 1 lex))
+                                   start)
+                          (nth 2 lex) (nthcdr 3 lex))))
+          (when (eq (car lex) 'stop)
+            ;; Don't stop yet, we're looking for the longest match.
+            (setq match (list (cadr lex) start))
+            (message "Found match: %s" match)
+            (setq lex (cddr lex)))
+          (cl-assert (not (eq (car lex) 'stop)))
+          (and lex (>= start stop)))
+      (let ((c (char-before start)))
+        (setq start (1- start))
+        (setq lex (cond
+                   ((eq (car lex) 'table) (aref (cdr lex) c))
+                   ((integerp (car lex)) (if (eq c (car lex)) (cdr lex)))))
+        (setq lastlex lex)))
+    (message "Final search pos considered: %s" start)
+    ;; The difference between `lex' and `lastlex' is basically that `lex'
+    ;; may depend on data after `stop' (if there was an `end-of-file' or
+    ;; `word-boundary' or basically any `check').  So let's return `lastlex'
+    ;; so it can be correctly used to continue the match with a different
+    ;; content than what's after `stop'.
+    (nconc match lastlex)))
+
+(defun looking-back-fast--do (regexp &optional stop)
+  (let ((lexer (lex-compile (rvrx-reverse (lex-parse-re regexp)))))
+    (lex-match-buffer-backward lexer stop)))
+
+(defmacro looking-back-fast (regexp &optional stop)
+  (if (stringp regexp)
+      ;; Do the work at compile time.
+      (let ((lexer (lex-compile (rvrx-reverse (lex-parse-re regexp)))))
+	`(cadr (lex-match-buffer-backward ,lexer ,stop)))
+    ;; Do the work later.
+    `(cadr (looking-back-fast--do ,regexp, stop))))
