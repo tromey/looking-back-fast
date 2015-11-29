@@ -1,12 +1,18 @@
 
+;; Subpatterns taking a sequence of sexps that can be reversed by
+;; reversing the arguments.
 (defconst rvrx--ordinary-subpatterns
   '(and : seq sequence submatch group submatch-n group-n or |
 	minimal-match maximal-match zero-or-more 0+
 	* *? one-or-more 1+ + +? zero-or-one optional opt ? ??))
 
+;; If a pattern is a list whose car is one of these symbols, it can be
+;; passed through without change.
 (defconst rvrx--pass-through
   '(any in char not syntax category))
 
+;; Symbols that are mapped to a mirror symbol in the reversed regexp.
+;; This is a bidirectional alist, used with both assq and rassq.
 (defconst rvrx--mirror-alist
   '((line-start . line-end)
     (bol . eol)
@@ -19,6 +25,12 @@
     (symbol-start . symbol-end)))
 
 (defun rvrx-reverse (regexp)
+  "Reverse a regular expression.
+
+REGEXP is an Emacs regular expression in the form used by `rx'.
+This returns a regular expression, also in `rx' form, that is the
+reverse of REGEXP.  That is, if REGEXP matches a string, then the
+result will match the reversed string."
   (pcase regexp
     ((pred stringp)
      (reverse regexp))
@@ -43,7 +55,7 @@
     (`(>= . (,n . ,rest))
      `(>= ,n . (mapcar #'rvrx-reverse rest)))
 
-    (`(backref . ,rest)
+    (`(backref . ,_)
      ;; We could though, with a trick and more work.  The idea is,
      ;; swap backrefs with their original expression so that the
      ;; original expression comes first in the resulting regexp.
@@ -52,9 +64,9 @@
      ;; (non-reversed) regexp.
      (error "'backref form not handled here"))
 
-    (`(eval . ,rest)
+    (`(eval . ,_)
      (error "'eval form not handled here"))
-    (`(regexp . ,rest)
+    (`(regexp . ,_)
      (error "'regexp form not handled here"))
 
     ((and `(,op . ,_) (guard (memq op rvrx--pass-through)))
