@@ -1,3 +1,5 @@
+;;; looking-back-fast.el - Faster looking-back. -*- lexical-binding:t -*-
+
 (require 'lex)
 (require 'lex-parse-re)
 
@@ -129,3 +131,5 @@ continue the match elsewhere."
 	`(cadr (lex-match-buffer-backward ,lexer ,stop)))
     ;; Do the work later.
     `(cadr (looking-back-fast--do ,regexp, stop))))
+
+;;; looking-back-fast.el ends here
